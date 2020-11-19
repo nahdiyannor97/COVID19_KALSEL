@@ -1,0 +1,264 @@
+---
+title: "covproject_kalsel"
+author: "Nahdiyan_Noor"
+date: "11/12/2020"
+output:
+  pdf_document: 
+    toc: yes
+    toc_depth: '2'
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      meesage = FALSE,
+                      warning = FALSE,
+                      fig.align = "center",
+                      out.width = "100%")
+```
+
+Import semua library yang dibutuhkan.
+
+```{r message = FALSE, echo = FALSE}
+library(httr)
+library(dplyr)
+library(ggplot2)
+library(hrbrthemes)
+library(lubridate)
+library(tidyr)
+```
+
+Data COVID-19 yang digunakan adalah data dari provinsi Kalimantan Selatan. Crawling dilakukan dengan menggunakan library 'httr' dari R, dan API yang bersumber dari covid19.go.id untuk sumber datanya.
+
+```{r}
+resp <- GET("https://data.covid19.go.id/public/api/prov_detail_KALIMANTAN_SELATAN.json")
+data_raw <- content(resp, as = "parsed", simplifyVector = TRUE)
+```
+
+Munculkan semua nama kolom pada data untuk memudahkan dalam pengerjaan.
+
+```{r}
+names(data_raw)
+```
+
+Kapan data COVID-19 di Kalimantan Selatan terakhir diupdate ?
+
+```{r}
+print(paste("Data terakhir diupdate pada tanggal",
+            data_raw$last_date))
+```
+
+Berapa jumlah total kasus COVID-19 di Kalimantan Selatan ?
+Berapa persentase meninggal akibat COVID-19 di Kalimantan Selatan ?
+Berapa persentase tingkat kesembuhan COVID-19 di Kalimantan Selatan ?
+
+```{r}
+print(paste("Total kasus COVID-19 di Kalimantan Selatan sebanyak",
+            data_raw$kasus_total,
+            "Jiwa"))
+print(paste("Persentase kematian akibat COVID-19 di Kalimantan Selatan sebanyak",
+            data_raw$meninggal_persen,
+            "%"))
+print(paste("Persentase tingkat kesembuhan akibat COVID-19 di Kalimantan Selatan sebanyak",
+            data_raw$sembuh_persen,
+            "%"))
+```
+
+Informasi yang diberikan dari yang sebelumnya sudah sangat singkat dan jelas, hanya saja kita belum memperoleh data yang lengkap. Pada bagian ini kita akan mengambil data yang lebih lengkap terkait perkembangan COVID-19 di Kalimantan Selatan.
+
+Data yang diambil akan disimpan dengan format data frame ke dalam variabel bernama 'data_kalsel'.
+
+```{r}
+data_kalsel <- data_raw$list_perkembangan
+data_kalsel <- as.data.frame(data_kalsel)
+```
+
+Melihat tipe data untuk memudahkan dalam pengerjaan. Dan memperlihatkan data teratas untuk mengetahui isi data.
+
+```{r}
+str(data_kalsel)
+head(data_kalsel)
+```
+
+Dari tabel data diatas terlihat jelas tipe data yang kita miliki hampir semua mempunyai tipe data integer, hanya ada satu tipe data yang bertipe numeric pada kolom tanggal. Dari tabel diatas kita juga mengetahui ada hal yang aneh dilihat pada kolom tanggal, yaitu format penulisan yang tidak umum digunakan pada penulisan "tahun-bulan-hari", pada bagian ini kita akan merapihkan data, bukan hanya pada kolom tanggal tetapi pada keseluruhan kolom.
+
+Beberapa tahapan yang dilakukan untuk merapihkan data sebagai berikut :
+1. Menghapus kolom "DIRAWAT_OR_ISOLASI" dan "AKUMULASI_DIRAWAT_OR_ISOLASI"
+2. Menghapus semua kolom yang berisi nilai kumulatif
+3. Mengganti nama kolo "KASUS" menjadi "kasus_baru"
+4. Merubah format penulisan kolom berikut menjadi huruf kecil :
+    A. kolom MENINGGAL
+    B. kolom SEMBUH
+5. Memperbaiki data pada kolom tanggal
+
+```{r}
+new_data_kalsel <- data_kalsel %>%
+  select(-contains("DIRAWAT_OR_ISOLASI")) %>%
+  select(-starts_with("AKUMULASI")) %>%
+  rename(kasus_baru = KASUS,
+         meninggal = MENINGGAL,
+         sembuh = SEMBUH) %>%
+  mutate(tanggal = as.POSIXct(tanggal / 1000, origin = "1970-01-01"),
+         tanggal = as.Date(tanggal))
+str(new_data_kalsel)
+head(new_data_kalsel)
+```
+
+Setelah dirapihkan bisa dilihat sekarang kita mempunyai data yang bisa dibilang lumayan rapi untuk di olah.
+
+Tahap selanjutnya adalah melakukan plot pada keseluruhan data dengan menggunakan library 'ggplot2', untuk melihat ada atau tidaknya pelonjakan kasus COVID-19 di Kalimantan Selatan.
+
+```{r, fig.width=10,fig.height=5}
+ggplot(data = new_data_kalsel,
+       mapping = aes(x = tanggal, y = kasus_baru)) +
+  geom_col(fill = "salmon") +
+  scale_x_date(date_labels="%b %y",date_breaks  ="1 month") +
+  labs(x = NULL, y = "Jumlah Kasus",
+       title = "Kasus harian positif COVID-19 di Kalimantan Selatan",
+       caption = "Sumber Data : covid19.go.id") +
+  theme_ipsum(base_size  = 13, plot_title_size = 21,
+              grid = "Y", ticks = TRUE) +
+  theme(plot.title.position = "plot")
+```
+
+Dari plot yang dihasilkan kita bisa melihat bahwa kasus COVID-19 di Kalimantan Selatan sangat beragam setiap harinya, pelonjakan kasus COVID-19 di Kalimantan Selatan terjadi pada bulan Juni dan bulan Agustus, dan kasus terus menurun setelah bulan Agustus. Ini menandakan bahwa penanganan dan kesadaran masyarakat Kalimantan Selatan terhadap COVID-19 sudah bagus.
+
+Tahap selanjutnya kita akan melakukan plot untuk melihat kasus sembuh dari COVID-19 di Kalimantan Selatan. Plot masih menggunakan library yang sama dengan sebelumnya, library 'ggplot2'.
+
+```{r, fig.width=10,fig.height=5}
+ggplot(data = new_data_kalsel,
+       mapping = aes(x = tanggal, y = sembuh)) +
+  geom_col(fill = "olivedrab2") +
+  scale_x_date(date_labels = "%b %y", date_breaks = "1 month") +
+  labs(x = NULL, y = "Jumlah Kasus",
+       title = "Kasus harian sembuh COVID-19 di Kalimantan Selatan", 
+       caption = "Sumber Data : covid19.go.id") +
+  theme_ipsum(base_size = 13, plot_title_size = 21,
+              grid = "Y", ticks = TRUE) +
+  theme(plot.title.position = "plot")
+```
+
+Dari plot yang dihasilkan kita bisa melihat kesembuhan dari COVID-19 beragam, dan kesembuhan terbesar terjadi pada bulan Agustus, dan melebihi dari jumlah kasus positif COVID-19 yang ada dibulan tersebut.Ini menandakan bahwa penanganan dari pemerintah setempat sudah bagus.
+
+Selanjutnya kita akan melakukan plot untuk melihat kasus meningggal akibat COVID-19 di Kalimantan Selatan, masih dengan library yang sama yaitu 'ggplot2'.
+
+```{r, fig.width=10,fig.height=5}
+ggplot(data = new_data_kalsel,
+       mapping = aes(x = tanggal, y = meninggal)) +
+  geom_col(fill = "darkslategray4") +
+  scale_x_date(date_labels = "%b %y", date_breaks = "1 month") +
+  labs(x = NULL, y = "Jumlah Kasus",
+       title = "Kasus harian meninggal akibat COVID-19 di Kalimantan Selatan",
+       caption = "Sumber Data : covid19.go.id") +
+  theme_ipsum(base_size = 13, plot_title_size = 21,
+              grid = "Y", ticks = TRUE) +
+  theme(plot.title.position = "plot")
+```
+
+Dari plot yang didapatkan sangat jelas dilihat hanya terjadi satu kali peningkatan kasus meninggal akibat COVID-19, yaitu pada pertengahan bulan Mei, dikuti dengan terus menurunnya kasus meninggal akibat COVID-19. 
+
+Dengan melihat plot dari total kasus, dan plot dari kesembuhan, ini membuktikan penangan dan kesadaran masyarakat di Kalimantan Selatan terhadap COVID-19 sudah bagus, dan harapannnya akan terus menurunnya kasus dan meninggal akibat COVID-19 di Kalimantan Selatan.
+
+Tahapan selanjutnya kita akan menginspeksi data lebih lanjut untuk mengetahui, apakah kasus COVID-19 di Kalimantan Selatan minggu ini lebih baik dari minggu kemarin.
+
+```{r}
+data_kalsel_mingguan <- new_data_kalsel %>%
+  count(tahun = year(tanggal), 
+        minggu_ke = week(tanggal),
+        wt = kasus_baru,
+        name = "Jumlah")
+glimpse(data_kalsel_mingguan)
+```
+
+Data mingguan sudah didapatkan, tapi untuk menjawab pertanyaan apakah minggu ini lebih baik dari minggu kemarin maka kita harus melakukan kalkulasi sederhana dengan tahapan berikut :
+1. Membuat kolom baru yang berisi jumlah kasus baru dalam satu minggu sebelumnya. Kolom ini diberi nama 'jumlah_minggu_lalu'.
+2. Mengganti nilai NA pada kolom 'jumlah_minggu_lalu' dengan nilai 0.
+3. Melakukan perbandingan antara kolom 'jumlah' dengan kolom 'jumlah_minggu_lalu'.
+4. Hasil perbandingan ini disimpan dalam kolom baru dengan nama 'lebih_baik', isinya adalah TRUE apabila jumlah kasus baru minggu ini lebih rendah dibandingkan jumlah kasus minggu lalu.
+
+```{r}
+data_kalsel_mingguan <- data_kalsel_mingguan %>%
+  mutate(jumlah_minggulalu = lag(Jumlah, 1),
+         jumlah_minggulalu = ifelse(is.na(jumlah_minggulalu), 0, jumlah_minggulalu),
+         lebih_baik = Jumlah < jumlah_minggulalu)
+glimpse(data_kalsel_mingguan)
+```
+
+Setelah didapatkan data mingguan yang baru, kita sudah bisa menjawab pertanyaan apakah minggu ini lebih baik dari minggu kemarin, dengan cara melakukan plot data dengan library 'ggplot2'.
+
+```{r, fig.width=10,fig.height=5}
+ggplot(data = data_kalsel_mingguan,
+       mapping = aes(x = minggu_ke, y = Jumlah,
+                     fill = lebih_baik)) +
+  geom_col(show.legend = FALSE) +
+  scale_x_continuous(breaks = 9:100, expand = c(0, 0)) +
+  scale_fill_manual(values = c("TRUE" = "seagreen3", "FALSE" = "salmon")) +
+  labs(x = NULL, y = "Jumlah Kasus",
+       title = "Kasus mingguan Positif COVID-19 di Kalimantan Selatan",
+       subtitle = "Kolom berwarna hijau menandakan penambahan kasus baru lebih sedikit dibandingkan satu minggu sebelumnya",
+       caption = "Sumber data : covid19.go.id") +
+  theme_ipsum(base_size = 13, plot_title_size = 21,
+              grid = "Y", ticks = TRUE) +
+  theme(plot.title.position = "plot")
+```
+
+Dari plot diatas kita bisa lihat kasus perminggu positif COVID-19 di Kalimantan Selatan mengalami perubahan setiap minggunya. Namun terlihat pada minggu 24 dan 29 adalah dimana kasus positif COVID-19 mengalami peningkatan yang lebh tinggi dari pada minggu lainnya. Dan jika kita lihat minggu minggu yang berwarna hijau menandakan bahwa kasus COVID-19 di Kalimantan Selatan terus menurun.
+
+Tahap selanjutnya kita akan membuat data untuk melihat ada berapa kasus yang masih aktif hingga saat ini.
+
+```{r}
+data_kalsel_akumulasi <- new_data_kalsel %>%
+  transmute(tanggal, akumulasi_aktif = cumsum(kasus_baru) - cumsum(sembuh) - cumsum(meninggal),
+            akumulasi_sembuh = cumsum(sembuh), akumulasi_meninggal = cumsum(meninggal))
+tail(data_kalsel_akumulasi)
+```
+
+Dari data tabel diatas bisa dilihat pada baris terakhir terdapat jumlah kasus yang masih aktif hingga saat ini, dan ini sudah cukup untuk menjawab pertanyaan ada berapa kasus yang masih aktif.
+
+Tahap selanjutnya kita akan membuat plot untuk melihat pola kasus aktif, dengan menggunakan library yang sama 'ggplot2'
+
+```{r, fig.width=10,fig.height=5}
+ggplot(data = data_kalsel_akumulasi,
+       mapping = aes(x = tanggal, y = akumulasi_aktif)) +
+  geom_line() +
+  scale_x_date(date_labels = "%b %y", date_breaks = "1 month") +
+  labs(x = NULL, y = "Jumlah Kasus",
+       title = "Dinamika kasus aktif COVID-19 di Kalimantan Selatan",
+       caption = "Sumber data : covid19.go.id") +
+  theme_ipsum(base_size = 13, plot_title_size = 21,
+              grid = "Y", ticks = TRUE) +
+  theme(plot.title.position = "plot")
+```
+
+Dari plot diatas bisa dilihat, kasus aktif yang awalnya sempat mengalami peningkatan yang tinggi pada pertengahan bulan Juli, semakin hari hingga saat ini terus menurun, merupakan kabar baik dan semoga akan terus menurun.
+
+Tahap selanjutnya kita akan melakukan plot perbandingan kasus aktif, sembuh, dan meninggal. Tapi sebelum melakukan perbandingan kita membutuhkan tabel data yang baru dengan nama 'data_kalsel_akumulasi_pivot'.
+
+```{r}
+data_kalsel_akumulasi_pivot <- data_kalsel_akumulasi %>%
+  pivot_longer(cols = -tanggal,
+               names_to = "kategori", names_prefix = "akumulasi_", values_to = "jumlah")
+glimpse(data_kalsel_akumulasi_pivot)
+```
+
+Plot perbandingan kasus aktif, sembuh, dan meninggal.
+
+```{r, fig.width=10,fig.height=5}
+ggplot(data = data_kalsel_akumulasi_pivot,
+       mapping = aes(x = tanggal, y = jumlah, colour = (kategori))) +
+  geom_line(size = 0.9) +
+  scale_x_date(date_labels = "%b %y", date_breaks = "1 month") +
+  scale_y_continuous(sec.axis = dup_axis(name = NULL)) +
+  scale_color_manual(values = c("aktif" = "salmon", "meninggal" = "darkslategray4", "sembuh" = "olivedrab2"),
+                     labels = c("Aktif", "Meninggal", "Sembuh")) +
+  labs(x = NULL, y = "Jumlah Kasus Akumulasi",
+       colour = NULL, title = "Dinamika kasus COVID-19 di Kalimantan Selatan",
+       caption = "Sumber data : covid19.go.id") +
+  theme_ipsum(base_size = 13, plot_title_size = 21,
+              grid = "Y", ticks = TRUE) +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "top")
+```
+
+Kasus COVID-19 di Kalimantan Selatan dari BULAN April - November menunjukan bahwa kesembuhan yang terus meningkat setiap harinya, melampaui kasus aktif atau positif COVID-19. Untuk kasus positif bisa dilihat sempat mengalami kenaikan kasus, dan akhirnya mengalami penurunan hingga saat ini. Dan untuk kasus meninggal saat ini bisa dilihat setiap bulannya mengalami kenaikan walau tidak signifikan seperti kasus positif dan kasus sembuh.
+
+Dari plot diatas membuktikan penangan pemerintah setempat dalam menangani COVID-19 sangat bagus, dan harapannya kasus positif akan terus menurun diikuti kasus meninggal juga menurun. Dan jangan lupa untuk 3M, Menjaga jarak, Menggunakan Masker, dan Mencuci Tangan. Terimakasih dan Semoga Bermanfaat.
